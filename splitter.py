@@ -6,10 +6,15 @@
 def split_evenly(amount_cents, participants):
     """Divide one expense between the people who shared it.
 
-    Returns {person: cents_they_owe}.
+    Returns {person: cents_they_owe}. The shares always sum to exactly
+    amount_cents: when the amount doesn't divide evenly, the leftover cents go
+    one each to the first participants, in list order.
     """
-    share = amount_cents // len(participants)
-    return {person: share for person in participants}
+    share, remainder = divmod(amount_cents, len(participants))
+    return {
+        person: share + (1 if i < remainder else 0)
+        for i, person in enumerate(participants)
+    }
 
 
 def balances(expenses, people):
