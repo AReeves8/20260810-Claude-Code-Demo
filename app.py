@@ -12,6 +12,47 @@ CURRENCY = os.environ["LEDGER_CURRENCY"]
 
 _expenses = []
 
+
+def _is_name(value):
+    return isinstance(value, str) and value.strip() != ""
+
+
+def _validate_expense(body):
+    """Return a list of human-readable problems; empty means the body is valid."""
+    if not isinstance(body, dict):
+        return ["request body must be a JSON object"]
+
+    errors = []
+
+    amount = body.get("amount_cents")
+    if "amount_cents" not in body:
+        errors.append("amount_cents is required")
+    # bool is an int subclass; reject it explicitly. Floats are never money.
+    elif isinstance(amount, bool) or not isinstance(amount, int):
+        errors.append("amount_cents must be an integer number of cents")
+    elif amount <= 0:
+        errors.append("amount_cents must be greater than zero")
+
+    if "paid_by" not in body:
+        errors.append("paid_by is required")
+    elif not _is_name(body["paid_by"]):
+        errors.append("paid_by must be a non-empty string")
+
+    if "participants" not in body:
+        errors.append("participants is required")
+    else:
+        participants = body["participants"]
+        if not isinstance(participants, list) or not participants:
+            errors.append("participants must be a non-empty list")
+        elif not all(_is_name(p) for p in participants):
+            errors.append("participants must contain only non-empty strings")
+        elif len(set(participants)) != len(participants):
+            # Shares are keyed by person, so a duplicate would silently drop
+            # money and break the zero-sum invariant.
+            errors.append("participants must not contain duplicates")
+
+    return errors
+
 def create_app():
     
     app = Flask(__name__)
@@ -22,7 +63,10 @@ def create_app():
 
     @app.post("/expenses")
     def add_expense():
-        body = request.get_json(silent=True) or {}
+        body = request.get_json(silent=True)
+        errors = _validate_expense(body)
+        if errors:
+            return jsonify(error="invalid expense", details=errors), 400
         _expenses.append(
             {
                 "amount_cents": body["amount_cents"],
